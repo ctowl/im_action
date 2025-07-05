@@ -1,232 +1,64 @@
-name: Build ImmortalWrt Firmware
+name: Build ImmortalWrt Firmware for RK3568 R5S
 
 on:
+  push:
+    branches:
+      - main  # 当 main 分支有推送时触发
+  # 也可以手动触发工作流
   workflow_dispatch:
-    inputs:
-      target:
-        description: '目标平台'
-        required: true
-        type: choice
-        options:
-          - ramips
-          - mediatek
-          - x86
-          - bcm27xx
-          - ipq40xx
-          - ipq806x
-          - ipq807x
-          - rockchip
-          - sunxi
-          - mt7622
-          - ath79
-      subtarget:
-        description: '子平台/芯片组'
-        required: true
-        type: choice
-        options:
-          - mt7621
-          - mt7620a
-          - generic
-          - mt7622
-          - ipq40xx
-          - ipq806x
-          - ipq807x
-          - armv8
-          - x86_64
-          - bcm27xx_bcm2711
-          - rk3399
-          - rk3568
-          - rk3588
-      device:
-        description: '设备型号'
-        required: true
-        type: choice
-        options:
-          - d-team_newifi-d2
-          - xiaomi_mi-router-4a-gigabit
-          - glinet_gl-ar750s-ax
-          - linksys_wrt3200acm
-          - netgear_r7800
-          - netgear_r6220
-          - raspberrypi_4
-          - phicomm_k3
-          - phicomm_k2p
-          - amlogic_meson-gxl-s905d-phicomm-n1
-          - friendlyelec_nanopi-r5s  # NanoPi R5S
-          - friendlyelec_nanopi-r2s  # NanoPi R2S
-          - friendlyelec_nanopi-r4s  # NanoPi R4S
-          - x86_64
-          - banana_pi_bpi-r2pro
-          - ubnt_edgerouter-x
-      custom_config:
-        description: '自定义配置文件路径(留空使用默认配置)'
-        required: false
-        default: ''
-      custom_packages:
-        description: '额外安装的软件包(空格分隔)'
-        required: false
-        default: 'luci luci-app-ssr-plus luci-app-unblockneteasemusic luci-app-ttyd'
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 360
+    runs-on: ubuntu-22.04  # 使用 Ubuntu 22.04 作为构建环境
 
     steps:
-      - name: 检查环境
-        run: |
-          echo "当前工作目录: $(pwd)"
-          echo "Git版本: $(git --version)"
-          echo "磁盘空间:"
-          df -h
-          
-      - name: 设置Git安全目录
-        run: |
-          git config --global --add safe.directory /home/runner/work/*/*
-          
-      - name: 检出代码
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          submodules: recursive  # 确保子模块也被检出
-          
-      - name: 初始化环境
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: |
-          # 安装编译所需的依赖包
-          sudo apt-get update
-          sudo apt-get -y install build-essential asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev patch python3 python2.7 unzip zlib1g-dev lib32gcc1 libc6-dev-i386 subversion flex uglifyjs git-core gcc-multilib p7zip p7zip-full msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint device-tree-compiler g++-multilib antlr3 gperf wget curl swig rsync
-          # 清理系统空间，减少不必要的文件
-          sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php /etc/apt/sources.list.d
-          sudo clean -y
+      - name: Checkout code
+        uses: actions/checkout@v3  # 检出代码
 
-      - name: 克隆源代码
+      - name: Set up environment
         run: |
-          # 从ImmortalWrt仓库克隆源代码
-          git clone https://github.com/immortalwrt/immortalwrt -b master openwrt
-          cd openwrt
-          # 更新并安装所有可用的软件包 feeds
+          sudo apt update -y
+          sudo apt full-upgrade -y
+          sudo apt install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib \
+            g++-multilib git gnutls-bin help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev \
+            libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev \
+            libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 \
+            python3 python3-distutils python3-pip python3-setuptools python3-wheel rsync subversion swig \
+            texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+
+      - name: Initialize build environment
+        run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: 加载自定义配置
-        if: github.event.inputs.custom_config != ''
+      - name: Create custom .config
         run: |
-          cd openwrt
-          # 下载并使用用户提供的自定义配置文件
-          wget ${{ github.event.inputs.custom_config }} -O .config
+          cat << EOF > .config
+# 基础配置
+CONFIG_TARGET_rockchip=y
+CONFIG_TARGET_rockchip_armv8=y
+CONFIG_TARGET_rockchip_armv8_DEVICE_nanopi-r5s=y
 
-      - name: 设置默认配置
-        if: github.event.inputs.custom_config == ''
+# 你可以在此处添加其他自定义配置
+# 例如，启用一些额外的软件包
+# CONFIG_PACKAGE_luci=y
+# CONFIG_PACKAGE_openssh-server=y
+
+EOF
+
+      - name: Configure build
         run: |
-          cd openwrt
-          target="${{ github.event.inputs.target }}"
-          subtarget="${{ github.event.inputs.subtarget }}"
-          device="${{ github.event.inputs.device }}"
-          # 根据所选设备设置正确的编译配置
-          case "$device" in
-            friendlyelec_nanopi-r5s)
-              # 针对 NanoPi R5S 的配置
-              make defconfig
-              echo "CONFIG_TARGET_rockchip=y" >> .config
-              echo "CONFIG_TARGET_rockchip_rk3588=y" >> .config
-              echo "CONFIG_TARGET_rockchip_rk3588_DEVICE_friendlyelec_nanopi-r5s=y" >> .config
-              ;;
-            friendlyelec_nanopi-r2s|friendlyelec_nanopi-r4s)
-              # 针对其他 Rockchip 设备的配置
-              make defconfig
-              echo "CONFIG_TARGET_rockchip=y" >> .config
-              echo "CONFIG_TARGET_rockchip_rk3399=y" >> .config
-              echo "CONFIG_TARGET_rockchip_rk3399_DEVICE_$device=y" >> .config
-              ;;
-            *)
-              # 通用设备配置方法
-              make defconfig
-              make menuconfig target="${target}" subtarget="${subtarget}" device="${device}"
-              ;;
-          esac
+          make defconfig  # 使用默认配置
+          make menuconfig -n # 可以选择以非交互方式配置，但主要配置依赖上面的 .config
+          make oldconfig  # 根据 .config 更新配置
 
-      - name: 添加自定义软件包
-        if: github.event.inputs.custom_packages != ''
+      - name: Build firmware
         run: |
-          cd openwrt
-          # 添加用户指定的额外软件包到配置中
-          packages="${{ github.event.inputs.custom_packages }}"
-          for package in $packages; do
-            echo "CONFIG_PACKAGE_$package=y" >> .config
-          done
+          make -j$(nproc) V=s  # 使用多线程进行构建
 
-      - name: 下载软件包依赖
-        run: |
-          cd openwrt
-          # 多线程下载所有依赖包
-          make download -j$(nproc) || make download -j1 V=s
-          # 检查并删除可能损坏的下载文件
-          find dl -size -1024c -exec ls -l {} \;
-          find dl -size -1024c -exec rm -f {} \;
-
-      - name: 编译固件
-        run: |
-          cd openwrt
-          echo -e "$(nproc) 线程编译."
-          # 尝试多线程编译，如果失败则转为单线程详细输出模式
-          make -j$(nproc) || make -j1 V=s
-          echo "======================="
-          echo "空间使用情况:"
-          echo "======================="
-          df -h
-          echo "======================="
-          echo "编译目录大小:"
-          du -sh openwrt/bin
-
-      - name: 收集固件文件
-        id: collect
-        run: |
-          cd openwrt/bin/targets/*/*
-          mkdir -p $HOME/upload
-          cp -rfa * $HOME/upload/
-          # 检查是否有生成的固件文件
-          if [ "$(ls -A $HOME/upload)" = "" ]; then
-            echo "NO_FIRMWARE=yes" >> $GITHUB_ENV
-          fi
-          cd $HOME/upload
-          echo "FIRMWARE_SIZE=$(du -sh . | awk '{print $1}')" >> $GITHUB_ENV
-
-      - name: 上传固件到 Artifacts
-        if: env.NO_FIRMWARE != 'yes'
-        uses: actions/upload-artifact@v4
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
         with:
-          name: ImmortalWrt-${{ github.event.inputs.target }}-${{ github.event.inputs.subtarget }}-${{ github.event.inputs.device }}
-          path: $HOME/upload/
-          retention-days: 7
-
-      - name: 生成发布标签
-        id: tag
-        if: env.NO_FIRMWARE != 'yes'
-        run: |
-          # 生成包含日期和设备信息的发布标签
-          echo "TAG_NAME=ImmortalWrt-$(date +%Y%m%d)-${{ github.event.inputs.target }}-${{ github.event.inputs.subtarget }}-${{ github.event.inputs.device }}" >> $GITHUB_ENV
-
-      - name: 创建发布版本
-        id: create_release
-        if: env.NO_FIRMWARE != 'yes'
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ env.TAG_NAME }}
-          release_name: ${{ env.TAG_NAME }}
-          draft: false
-          prerelease: false
-
-      - name: 上传固件到发布版本
-        if: env.NO_FIRMWARE != 'yes'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: $HOME/upload/
-          asset_name: ImmortalWrt-${{ github.event.inputs.target }}-${{ github.event.inputs.subtarget }}-${{ github.event.inputs.device }}.zip
-          asset_content_type: application/zip
+          name: immortalwrt-rk3568-r5s-firmware
+          path: bin/targets/*/*/*.bin  # 上传生成的固件文件
