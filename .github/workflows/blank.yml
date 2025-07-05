@@ -73,11 +73,23 @@ jobs:
     timeout-minutes: 360
 
     steps:
+      - name: 检查环境
+        run: |
+          echo "当前工作目录: $(pwd)"
+          echo "Git版本: $(git --version)"
+          echo "磁盘空间:"
+          df -h
+          
+      - name: 设置Git安全目录
+        run: |
+          git config --global --add safe.directory /home/runner/work/*/*
+          
       - name: 检出代码
         uses: actions/checkout@v4
         with:
           ref: main
-
+          submodules: recursive  # 确保子模块也被检出
+          
       - name: 初始化环境
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -149,7 +161,7 @@ jobs:
         run: |
           cd openwrt
           # 多线程下载所有依赖包
-          make download -j$(nproc)
+          make download -j$(nproc) || make download -j1 V=s
           # 检查并删除可能损坏的下载文件
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
@@ -217,4 +229,4 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: $HOME/upload/
           asset_name: ImmortalWrt-${{ github.event.inputs.target }}-${{ github.event.inputs.subtarget }}-${{ github.event.inputs.device }}.zip
-          asset_content_type: application/zip    
+          asset_content_type: application/zip
