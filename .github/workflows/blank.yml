@@ -88,8 +88,6 @@ jobs:
           # 清理系统空间，减少不必要的文件
           sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php /etc/apt/sources.list.d
           sudo clean -y
-          # 下载BitTorrent DHT网络数据，加速后续下载
-          curl -fsSL https://raw.githubusercontent.com/P3TERX/aria2.conf/master/dht.dat > ~/dht.dat
 
       - name: 克隆源代码
         run: |
