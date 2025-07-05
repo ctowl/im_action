@@ -3,8 +3,6 @@ name: Build ImmortalWrt Firmware for RK3568 R5S
 on:
   push:
     branches:
-      - main  # 当 main 分支有推送时触发
-  # 也可以手动触发工作流
   workflow_dispatch:
 
 jobs:
