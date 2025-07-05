@@ -1,0 +1,146 @@
+name: Build ImmortalWrt Firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target System (e.g., ramips, mediatek, x86)'
+        required: true
+        default: 'ramips'
+      subtarget:
+        description: 'Subtarget (e.g., mt7621, mt7620a, generic)'
+        required: true
+        default: 'mt7621'
+      device:
+        description: 'Device Name (e.g., d-team_newifi-d2, xiaomi_mi-router-4a-gigabit)'
+        required: true
+        default: 'd-team_newifi-d2'
+      custom_config:
+        description: 'Custom .config file path (leave blank for default)'
+        required: false
+        default: ''
+      custom_packages:
+        description: 'Additional packages to install (space-separated)'
+        required: false
+        default: 'luci luci-app-ssr-plus luci-app-unblockneteasemusic luci-app-ttyd'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Initialization Environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install build-essential asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev patch python3 python2.7 unzip zlib1g-dev lib32gcc1 libc6-dev-i386 subversion flex uglifyjs git-core gcc-multilib p7zip p7zip-full msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint device-tree-compiler g++-multilib antlr3 gperf wget curl swig rsync
+          sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php /etc/apt/sources.list.d
+          sudo clean -y
+          curl -fsSL https://raw.githubusercontent.com/P3TERX/aria2.conf/master/dht.dat > ~/dht.dat
+
+      - name: Clone Source Code
+        run: |
+          git clone https://github.com/immortalwrt/immortalwrt -b master openwrt
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Load Custom Configuration
+        if: github.event.inputs.custom_config != ''
+        run: |
+          cd openwrt
+          wget ${{ github.event.inputs.custom_config }} -O .config
+
+      - name: Set Default Configuration
+        if: github.event.inputs.custom_config == ''
+        run: |
+          cd openwrt
+          target="${{ github.event.inputs.target }}"
+          subtarget="${{ github.event.inputs.subtarget }}"
+          device="${{ github.event.inputs.device }}"
+          make defconfig
+          make menuconfig target="${target}" subtarget="${subtarget}" device="${device}"
+
+      - name: Add Custom Packages
+        if: github.event.inputs.custom_packages != ''
+        run: |
+          cd openwrt
+          packages="${{ github.event.inputs.custom_packages }}"
+          for package in $packages; do
+            echo "CONFIG_PACKAGE_$package=y" >> .config
+          done
+
+      - name: Download Package Dependencies
+        run: |
+          cd openwrt
+          make download -j$(nproc)
+          find dl -size -1024c -exec ls -l {} \;
+          find dl -size -1024c -exec rm -f {} \;
+
+      - name: Build Firmware
+        run: |
+          cd openwrt
+          echo -e "$(nproc) thread build."
+          make -j$(nproc) || make -j1 V=s
+          echo "======================="
+          echo "Space usage:"
+          echo "======================="
+          df -h
+          echo "======================="
+          du -sh openwrt/bin
+
+      - name: Collect Firmware
+        id: collect
+        run: |
+          cd openwrt/bin/targets/*/*
+          mkdir -p $HOME/upload
+          cp -rfa * $HOME/upload/
+          if [ "$(ls -A $HOME/upload)" = "" ]; then
+            echo "NO_FIRMWARE=yes" >> $GITHUB_ENV
+          fi
+          cd $HOME/upload
+          echo "FIRMWARE_SIZE=$(du -sh . | awk '{print $1}')" >> $GITHUB_ENV
+
+      - name: Upload Firmware to Artifacts
+        if: env.NO_FIRMWARE != 'yes'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ImmortalWrt-${{ github.event.inputs.target }}-${{ github.event.inputs.subtarget }}-${{ github.event.inputs.device }}
+          path: $HOME/upload/
+          retention-days: 7
+
+      - name: Generate Release Tag
+        id: tag
+        if: env.NO_FIRMWARE != 'yes'
+        run: |
+          echo "TAG_NAME=ImmortalWrt-$(date +%Y%m%d)-${{ github.event.inputs.target }}-${{ github.event.inputs.subtarget }}-${{ github.event.inputs.device }}" >> $GITHUB_ENV
+
+      - name: Create Release
+        id: create_release
+        if: env.NO_FIRMWARE != 'yes'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          release_name: ${{ env.TAG_NAME }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Firmware to Release
+        if: env.NO_FIRMWARE != 'yes'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: $HOME/upload/
+          asset_name: ImmortalWrt-${{ github.event.inputs.target }}-${{ github.event.inputs.subtarget }}-${{ github.event.inputs.device }}.zip
+          asset_content_type: application/zip    
