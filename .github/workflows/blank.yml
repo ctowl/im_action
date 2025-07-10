@@ -48,7 +48,7 @@ jobs:
 
       - name: Load custom config from repo
         run: |
-          cp custom/${{ github.event.inputs.device }}.config .config
+          cp /custom/${{ github.event.inputs.device }}.config .config
 
       - name: Download sources
         run: |
