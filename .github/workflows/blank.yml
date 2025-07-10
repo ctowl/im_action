@@ -21,6 +21,10 @@ on:
         type: choice
         options:
           - nanopi-r5s
+      config_url:
+        description: '公开可访问的 .config 文件 URL (必须以 http 或 https 开头)'
+        required: true
+        default: ''
 
 jobs:
   build:
@@ -28,29 +32,32 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: Checkout OpenWrt
+      - name: Checkout OpenWrt source
         uses: actions/checkout@v4
         with:
-          repository: immortalwrt/immortalwrt
+          repository: openwrt/openwrt
           ref: master
 
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential ccache ecj fastjar file g++ gawk gettext git libncurses5-dev libssl-dev \
-            python2.7 python3 unzip wget zlib1g-dev rsync subversion swig time qemu-utils
+          sudo apt-get install -y build-essential libncurses5-dev libssl-dev python3 unzip wget
 
-      - name: Update & install feeds
+      - name: Update and install feeds
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Load custom config from repo
+      - name: Download custom config from URL
         run: |
-          cp /custom/${{ github.event.inputs.device }}.config .config
+          if [[ -z "${{ github.event.inputs.config_url }}" ]]; then
+            echo "Error: config_url is empty"
+            exit 1
+          fi
+          echo "Downloading config from ${{ github.event.inputs.config_url }}"
+          wget -O .config "${{ github.event.inputs.config_url }}"
 
-      - name: Download sources
+      - name: Prepare build environment
         run: |
           make defconfig
           make download -j$(nproc)
@@ -78,7 +85,7 @@ jobs:
         run: |
           echo "TAG_NAME=OpenWrt-$(date +%Y%m%d)-${{ github.event.inputs.device }}" >> $GITHUB_ENV
 
-      - name: Create GitHub Release
+      - name: Create GitHub release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -92,8 +99,7 @@ jobs:
 
             - 📅 构建日期：**${{ env.TAG_NAME }}**
             - 📦 设备型号：**${{ github.event.inputs.device }}**
-            - 🧱 平台架构：**${{ github.event.inputs.target }} / ${{
-              github.event.inputs.subtarget }}**
+            - 🧱 平台架构：**${{ github.event.inputs.target }} / ${{ github.event.inputs.subtarget }}**
             - 🌐 默认 IP：`192.168.1.1`
             - 🔑 默认用户名：`root`
             - 🔒 默认密码：空（首次登录无需密码）
@@ -104,17 +110,17 @@ jobs:
 
             | 文件名 | 描述 |
             |--------|------|
-            | `firmware.zip` | 固件打包下载（包括内核 + rootfs + 校验文件） |
+            | `firmware.zip` | 固件包（包括内核、根文件系统等） |
 
             ---
 
-            ## 📚 功能由 `.config` 文件决定（见源码 `custom/${{ github.event.inputs.device }}.config`）
+            ## 📚 功能根据 .config 文件自定义
 
             ---
 
-            ✨ 固件基于 [OpenWrt 官方仓库](https://github.com/openwrt/openwrt) 编译。
+            ✨ 基于 [OpenWrt 官方仓库](https://github.com/openwrt/openwrt) 编译。
 
-      - name: Upload firmware to Release
+      - name: Upload firmware to release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
