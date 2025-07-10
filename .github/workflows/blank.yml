@@ -8,46 +8,19 @@ on:
         required: true
         type: choice
         options:
-          - ramips
-          - mediatek
-          - x86
-          - bcm27xx
-          - ipq40xx
-          - ipq806x
           - rockchip
       subtarget:
         description: 'Subtarget/Chip'
         required: true
         type: choice
         options:
-          - mt7621
-          - mt7620
-          - x86_64
-          - bcm2710
-          - bcm2711
-          - ipq40xx
-          - ipq806x
-          - rk3328
-          - rk3399
+          - rk3568
       device:
-        description: 'Device name (e.g. xiaomi_mir3g)'
+        description: 'Device name'
         required: true
         type: choice
         options:
-          - xiaomi_mir3g
-          - netgear_r6220
-          - glinet_gl-ar750
-          - friendlyarm_nanopi-r2s
-          - raspberrypi_4
-          - x86_64
-      custom_config:
-        description: 'Custom .config URL (optional)'
-        required: false
-        default: ''
-      custom_packages:
-        description: 'Extra packages (space-separated)'
-        required: false
-        default: 'luci luci-ssl luci-app-ttyd'
+          - nanopi-r5s
 
 jobs:
   build:
@@ -73,24 +46,9 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Load custom config if provided
-        if: ${{ github.event.inputs.custom_config != '' }}
+      - name: Load custom config from repo
         run: |
-          curl -fsSL "${{ github.event.inputs.custom_config }}" -o .config
-
-      - name: Generate default config
-        if: ${{ github.event.inputs.custom_config == '' }}
-        run: |
-          echo "CONFIG_TARGET_${{ github.event.inputs.target }}=y" >> .config
-          echo "CONFIG_TARGET_${{ github.event.inputs.target }}_${{ github.event.inputs.subtarget }}=y" >> .config
-          echo "CONFIG_TARGET_${{ github.event.inputs.target }}_${{ github.event.inputs.subtarget }}_DEVICE_${{ github.event.inputs.device }}=y" >> .config
-
-      - name: Add extra packages
-        if: ${{ github.event.inputs.custom_packages != '' }}
-        run: |
-          for pkg in ${{ github.event.inputs.custom_packages }}; do
-            echo "CONFIG_PACKAGE_$pkg=y" >> .config
-          done
+          cp custom/${{ github.event.inputs.device }}.config .config
 
       - name: Download sources
         run: |
@@ -107,6 +65,7 @@ jobs:
           mkdir -p output
           cp -r bin/targets/*/* output/
           cd output && zip -r ../firmware.zip . && cd ..
+          echo "FIRMWARE_PATH=firmware.zip" >> $GITHUB_ENV
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -116,7 +75,8 @@ jobs:
 
       - name: Create tag
         id: tag
-        run: echo "TAG_NAME=OpenWrt-$(date +%Y%m%d)-${{ github.event.inputs.device }}" >> $GITHUB_ENV
+        run: |
+          echo "TAG_NAME=OpenWrt-$(date +%Y%m%d)-${{ github.event.inputs.device }}" >> $GITHUB_ENV
 
       - name: Create GitHub Release
         uses: actions/create-release@v1
@@ -127,6 +87,32 @@ jobs:
           release_name: ${{ env.TAG_NAME }}
           draft: false
           prerelease: false
+          body: |
+            # 🎉 OpenWrt 固件发布 - ${{ github.event.inputs.device }}
+
+            - 📅 构建日期：**${{ env.TAG_NAME }}**
+            - 📦 设备型号：**${{ github.event.inputs.device }}**
+            - 🧱 平台架构：**${{ github.event.inputs.target }} / ${{
+              github.event.inputs.subtarget }}**
+            - 🌐 默认 IP：`192.168.1.1`
+            - 🔑 默认用户名：`root`
+            - 🔒 默认密码：空（首次登录无需密码）
+
+            ---
+
+            ## 📥 下载地址
+
+            | 文件名 | 描述 |
+            |--------|------|
+            | `firmware.zip` | 固件打包下载（包括内核 + rootfs + 校验文件） |
+
+            ---
+
+            ## 📚 功能由 `.config` 文件决定（见源码 `custom/${{ github.event.inputs.device }}.config`）
+
+            ---
+
+            ✨ 固件基于 [OpenWrt 官方仓库](https://github.com/openwrt/openwrt) 编译。
 
       - name: Upload firmware to Release
         uses: actions/upload-release-asset@v1
@@ -134,6 +120,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create-release.outputs.upload_url }}
-          asset_path: firmware.zip
+          asset_path: ${{ env.FIRMWARE_PATH }}
           asset_name: OpenWrt-${{ github.event.inputs.device }}.zip
           asset_content_type: application/zip
