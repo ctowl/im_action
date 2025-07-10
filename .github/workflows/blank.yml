@@ -31,7 +31,7 @@ jobs:
       - name: Checkout OpenWrt
         uses: actions/checkout@v4
         with:
-          repository: openwrt/openwrt
+          repository: immortalwrt/immortalwrt
           ref: master
 
       - name: Install dependencies
