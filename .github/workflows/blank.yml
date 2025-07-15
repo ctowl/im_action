@@ -57,12 +57,6 @@ jobs:
           echo "Downloading config from ${{ github.event.inputs.config_url }}"
           wget -O .config "${{ github.event.inputs.config_url }}"
 
-      - name: Prepare build environment
-        run: |
-          make defconfig
-          make download -j$(nproc)
-          find dl -size -1024c -exec rm -f {} \;
-
       - name: Build firmware
         run: |
           make -j$(nproc) || make -j1 V=s
