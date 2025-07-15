@@ -24,7 +24,7 @@ on:
       config_url:
         description: '公开可访问的 .config 文件 URL (必须以 http 或 https 开头)'
         required: true
-        default: 'https://raw.githubusercontent.com/ctowl/im_action/refs/heads/main/custom/%20nanopi-r5s.config'
+        default: 'https://raw.githubusercontent.com/ctowl/im_action/refs/heads/main/custom/nanopi-r5s.config'
 
 jobs:
   build:
@@ -38,10 +38,9 @@ jobs:
           repository: openwrt/openwrt
           ref: master
 
-      - name: Install dependencies
+      - name: Install build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libncurses5-dev libssl-dev python3 unzip wget
+          sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
 
       - name: Update and install feeds
         run: |
