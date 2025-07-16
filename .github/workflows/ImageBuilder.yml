@@ -59,7 +59,7 @@ jobs:
           echo "CONFIG_TARGET_rockchip_rk3568_DEVICE_${{ github.event.inputs.device }}=y" >> .config
           echo "CONFIG_IB=y" >> .config
           make defconfig
-          make imagebuilder -j$(nproc)
+          make imagebuilder -j1 V=s
 
       - name: Archive ImageBuilder
         run: |
