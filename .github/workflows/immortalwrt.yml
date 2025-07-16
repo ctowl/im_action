@@ -105,6 +105,7 @@ jobs:
       - name: Extract workspace
         run: |
           tar -I zstd -xf workspace.tar.zst
+          rm workspace.tar.zst
 
       - name: Build firmware
         run: |
