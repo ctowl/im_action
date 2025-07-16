@@ -44,15 +44,17 @@ jobs:
         run: |
           sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
 
-      - name: Download custom .config
+      - name: Download custom .config and prepare toolchain
         run: |
           wget -O .config "${{ github.event.inputs.config_url }}"
           make defconfig
-
+          make tools/install -j$(nproc)
+          make toolchain/install -j$(nproc)
+          
       - name: Save workspace as artifact
         run: |
           tar -czf workspace.tar.gz --warning=no-file-changed \
-            .config Makefile include scripts target package feeds tools toolchain
+            .config Makefile include scripts target package feeds tools toolchain staging_dir
       - uses: actions/upload-artifact@v4
         with:
           name: build-workspace
