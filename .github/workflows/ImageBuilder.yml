@@ -42,6 +42,13 @@ jobs:
 
       - name: Update & install feeds
         run: |
+          cat > feeds.conf.default <<EOF
+          src-git packages https://github.com/immortalwrt/packages
+          src-git luci https://github.com/immortalwrt/luci
+          src-git routing https://github.com/openwrt-routing/packages
+          src-git telephony https://github.com/openwrt/telephony
+          src-git emortal https://github.com/immortalwrt/packages
+          EOF
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
