@@ -51,9 +51,8 @@ jobs:
 
       - name: Save workspace as artifact
         run: |
-          tar -czf workspace.tar.gz \
-              --warning=no-file-changed \
-              .config Makefile target package feeds tools toolchain
+          tar -czf workspace.tar.gz --warning=no-file-changed \
+            .config Makefile include scripts target package feeds tools toolchain
       - uses: actions/upload-artifact@v4
         with:
           name: build-workspace
