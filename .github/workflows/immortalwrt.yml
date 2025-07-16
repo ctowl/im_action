@@ -1,4 +1,4 @@
-name: Build immortalwrt Firmware
+name: Build immortalwrt Firmware (Rockchip Optimized)
 
 on:
   workflow_dispatch:
@@ -44,7 +44,7 @@ jobs:
         run: |
           sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
           sudo apt-get install -y zstd
-          
+
       - name: Setup and update feeds
         run: |
           cat > feeds.conf.default <<EOF
@@ -64,11 +64,15 @@ jobs:
           make tools/install -j$(nproc)
           make toolchain/install -j$(nproc)
 
-      - name: Save workspace as artifact (.tar.zst)
+      - name: Remove other platforms (keep only rockchip)
+        run: |
+          find target/linux/ -mindepth 1 -maxdepth 1 -type d ! -name rockchip ! -name generic -exec rm -rf {} +
+
+      - name: Save workspace as artifact
         run: |
           tar -I 'zstd -19 -T0' -cf workspace.tar.zst --warning=no-file-changed \
-          $(find . -maxdepth 1 -type f -printf "%P\n") \
-          Makefile include scripts target package feeds tools toolchain staging_dir
+            $(find . -maxdepth 1 -type f -printf "%P\n") \
+            Makefile include scripts target package feeds tools toolchain staging_dir
 
       - uses: actions/upload-artifact@v4
         with:
@@ -96,39 +100,32 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-workspace
-          path: ./immortalwrt
+          path: .
 
       - name: Extract workspace
         run: |
-          cd immortalwrt
           tar -I zstd -xf workspace.tar.zst
-          rm workspace.tar.zst
-          
+
       - name: Build firmware
         run: |
-          cd immortalwrt
           make -j$(nproc) || make -j1 V=s
 
-      - name: Cleanup intermediate files
+      - name: Cleanup unnecessary directories
         run: |
-          cd immortalwrt
-          echo "🧹 Removing unnecessary files..."
-          find ./build_dir -type d \( -name "doc" -o -name "man" -o -name "examples" \) -exec rm -rf {} +
-          find feeds -type d -name ".git" -exec rm -rf {} +
-          rm -rf staging_dir/hostpkg build_dir/host
-          du -sh build_dir staging_dir || true
+          echo "Cleaning up build_dir, staging_dir, toolchain, etc..."
+          rm -rf build_dir dl staging_dir toolchain tmp .config.old .version .vermagic
 
       - name: Package firmware
         run: |
           mkdir -p output
-          cp -r immortalwrt/bin/targets/*/* output/
-          cd output && zip -r ../firmware.zip . && cd ..
+          cp -r bin/targets/*/* output/
+          tar -I 'zstd -19 -T0' -cf firmware.tar.zst -C output .
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
           name: firmware
-          path: firmware.zip
+          path: firmware.tar.zst
 
   release:
     runs-on: ubuntu-22.04
@@ -164,7 +161,7 @@ jobs:
 
             | 文件名 | 描述 |
             |--------|------|
-            | `firmware.zip` | 固件包（包括内核、根文件系统等） |
+            | `firmware.tar.zst` | 固件包（压缩格式） |
 
             ✨ 基于 [immortalwrt 官方仓库](https://github.com/immortalwrt/immortalwrt) 编译。
 
@@ -174,6 +171,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create-release.outputs.upload_url }}
-          asset_path: firmware.zip
-          asset_name: immortalwrt-${{ github.event.inputs.device }}.zip
-          asset_content_type: application/zip
+          asset_path: firmware.tar.zst
+          asset_name: immortalwrt-${{ github.event.inputs.device }}.tar.zst
+          asset_content_type: application/zstd
