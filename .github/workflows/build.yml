@@ -1,4 +1,4 @@
-name: Build OpenWrt Firmware (Split Jobs)
+name: Build immortalwrt Firmware (Split Jobs)
 
 on:
   workflow_dispatch:
@@ -37,7 +37,7 @@ jobs:
       - name: Checkout OpenWrt source
         uses: actions/checkout@v4
         with:
-          repository: openwrt/openwrt
+          repository: immortalwrt/immortalwrt
           ref: master
 
       - name: Init build environment
