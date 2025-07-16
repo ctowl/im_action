@@ -64,15 +64,9 @@ jobs:
           make tools/install -j$(nproc)
           make toolchain/install -j$(nproc)
 
-      - name: Remove other platforms (keep only rockchip)
-        run: |
-          find target/linux/ -mindepth 1 -maxdepth 1 -type d ! -name rockchip ! -name generic -exec rm -rf {} +
-
       - name: Save workspace as artifact
         run: |
-          tar -I 'zstd -19 -T0' -cf workspace.tar.zst --warning=no-file-changed \
-            $(find . -maxdepth 1 -type f -printf "%P\n") \
-            Makefile include scripts target package feeds tools toolchain staging_dir
+          tar -I 'zstd -19 -T0' -cf workspace.tar.zst --warning=no-file-changed .
 
       - uses: actions/upload-artifact@v4
         with:
