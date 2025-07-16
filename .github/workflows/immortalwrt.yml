@@ -67,7 +67,8 @@ jobs:
       - name: Save workspace as artifact (.tar.zst)
         run: |
           tar -I 'zstd -19 -T0' -cf workspace.tar.zst --warning=no-file-changed \
-            .config Makefile include scripts target package feeds tools toolchain staging_dir
+          $(find . -maxdepth 1 -type f -printf "%P\n") \
+          Makefile include scripts target package feeds tools toolchain staging_dir
 
       - uses: actions/upload-artifact@v4
         with:
@@ -101,7 +102,8 @@ jobs:
         run: |
           cd immortalwrt
           tar -I zstd -xf workspace.tar.zst
-
+          rm workspace.tar.zst
+          
       - name: Build firmware
         run: |
           cd immortalwrt
